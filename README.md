@@ -1,4 +1,5 @@
-# 💱 حاسبة الدينار العراقي والتومان صمم بواسطة رمانة https://rummana.bio.link/
+# 💱 حاسبة الدينار العراقي والتومان صمم بواسطة رمانة 
+https://rummana.bio.link
 https://github.com/RummanaOfficial
 
 <div align="center">
@@ -53,7 +54,7 @@ https://github.com/RummanaOfficial
 ```bash
 # استنسخ المستودع
 git clone https://github.com/RummanaOfficial/iqd-toman.git
-cd iqd-toman-calculator
+cd iqd-toman
 
 # شغّل سيرفر محلي بسيط
 python -m http.server 8000
