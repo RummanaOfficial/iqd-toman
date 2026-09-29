@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>حاسبة الدينار العراقي والتومان</title>
+
+<!-- ═══ إضافات PWA ═══ -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="theme-color" content="#0b1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="حاسبة العملات">
+<!-- ══════════════════ -->
+
+<style>
+  :root{
+    --bg:#0b1220; --card:#1e293b; --line:#334155; --txt:#e2e8f0;
+    --muted:#94a3b8; --accent:#38bdf8;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; padding:24px 16px;
+    font-family:"Segoe UI", Tahoma, system-ui, sans-serif;
+    background:radial-gradient(1200px 600px at 50% -10%, #1e293b, #0b1220 60%);
+    color:var(--txt); display:flex; justify-content:center;
+    padding-top:calc(24px + env(safe-area-inset-top));
+    padding-bottom:calc(24px + env(safe-area-inset-bottom));
+  }
+  .wrap{width:100%; max-width:660px}
+  h1{font-size:1.35rem; text-align:center; margin:0 0 20px}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:18px; margin-bottom:16px; box-shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+  .card h2{font-size:1rem; margin:0 0 14px; color:var(--accent); font-weight:600}
+  .row{display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; margin-bottom:10px}
+  .row:last-child{margin-bottom:0}
+  .lbl{color:var(--muted); font-size:.9rem; white-space:nowrap}
+  .unit{color:var(--muted); font-size:.85rem; white-space:nowrap; min-width:78px}
+  input{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--line);
+    background:#0b1220; color:var(--txt); font-size:1.05rem; font-weight:700;
+    text-align:center; direction:ltr; outline:none; transition:.15s;
+  }
+  input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(56,189,248,.15)}
+  input.big{font-size:1.25rem; text-align:right; padding-inline-start:16px}
+  .info{
+    font-size:.85rem; color:var(--muted); line-height:2;
+    border-top:1px dashed var(--line); margin-top:14px; padding-top:12px;
+  }
+  .info b{color:var(--txt); font-weight:700}
+  .err{color:#fca5a5}
+  .note{text-align:center; font-size:.78rem; color:var(--muted); margin-top:16px; line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>💱 حاسبة الدينار العراقي والتومان</h1>
+
+  <div class="card">
+    <h2>أسعار الصرف اليوم</h2>
+    <div class="row">
+      <span class="lbl">كل</span>
+      <input id="refUsd" inputmode="decimal" value="100">
+      <span class="unit">دولار أمريكي</span>
+    </div>
+    <div class="row">
+      <span class="lbl">تساوي</span>
+      <input id="iqdRate" inputmode="decimal" value="160000">
+      <span class="unit">دينار عراقي</span>
+    </div>
+    <div class="row">
+      <span class="lbl">وتساوي</span>
+      <input id="tomanRate" inputmode="decimal" value="24000000">
+      <span class="unit">تومان إيراني</span>
+    </div>
+    <div class="info" id="info"></div>
+  </div>
+
+  <div class="card">
+    <h2>التحويل (اكتب في أي خانة)</h2>
+    <div class="row">
+      <span class="lbl">دولار</span>
+      <input class="big" id="vUsd" inputmode="decimal" placeholder="0">
+      <span class="unit">USD</span>
+    </div>
+    <div class="row">
+      <span class="lbl">دينار عراقي</span>
+      <input class="big" id="vIqd" inputmode="decimal" placeholder="0">
+      <span class="unit">IQD</span>
+    </div>
+    <div class="row">
+      <span class="lbl">تومان</span>
+      <input class="big" id="vToman" inputmode="decimal" placeholder="0">
+      <span class="unit">IRT</span>
+    </div>
+  </div>
+
+  <div class="note">الأسعار تُحفظ تلقائياً في متصفحك — عدّلها كل يوم عند تغيّر السعر.</div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var refEl      = document.getElementById("refUsd");
+  var iqdRateEl  = document.getElementById("iqdRate");
+  var tomanRateEl= document.getElementById("tomanRate");
+  var vUsd       = document.getElementById("vUsd");
+  var vIqd       = document.getElementById("vIqd");
+  var vToman     = document.getElementById("vToman");
+  var infoEl     = document.getElementById("info");
+
+  var KEY = "iqd-toman-rates-v1";
+  var fields = { usd: vUsd, iqd: vIqd, toman: vToman };
+  var lastSource = "usd";
+
+  function normalizeDigits(s) {
+    return String(s)
+      .replace(/[٠-٩]/g, function (d) { return "٠١٢٣٤٥٦٧٨٩".indexOf(d); })
+      .replace(/[۰-۹]/g, function (d) { return "۰۱۲۳۴۵۶۷۸۹".indexOf(d); });
+  }
+
+  function parseNum(s) {
+    var t = normalizeDigits(s).replace(/[,\s٬_]/g, "");
+    var n = parseFloat(t);
+    return isFinite(n) ? n : 0;
+  }
+
+  function fmt(n) {
+    if (!isFinite(n)) return "";
+    var r = Math.round(n * 10000) / 10000;
+    return r.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  }
+
+  function readRates() {
+    var ref   = parseNum(refEl.value);
+    var iqd   = parseNum(iqdRateEl.value);
+    var toman = parseNum(tomanRateEl.value);
+    if (ref > 0 && iqd > 0 && toman > 0) {
+      return { iqd: iqd / ref, toman: toman / ref };
+    }
+    return null;
+  }
+
+  function updateInfo() {
+    var r = readRates();
+    if (!r) {
+      infoEl.innerHTML = '<span class="err">⚠️ أدخل أسعار الصرف أولاً (يجب أن تكون أكبر من صفر).</span>';
+      return;
+    }
+    var tomanPerIqd = r.toman / r.iqd;
+    var iqdPerToman = r.iqd / r.toman;
+
+    infoEl.innerHTML =
+      '<div>1 دولار = <b>' + fmt(r.iqd)   + '</b> دينار عراقي</div>' +
+      '<div>1 دولار = <b>' + fmt(r.toman) + '</b> تومان</div>' +
+      '<div>1 دينار عراقي = <b>' + fmt(tomanPerIqd) + '</b> تومان</div>' +
+      '<div>1 تومان = <b>' + fmt(iqdPerToman) + '</b> دينار عراقي</div>';
+  }
+
+  function recalc(source) {
+    lastSource = source;
+
+    var others = Object.keys(fields).filter(function (k) { return k !== source; });
+    var r = readRates();
+
+    if (!r || fields[source].value.trim() === "") {
+      others.forEach(function (k) { fields[k].value = ""; });
+      return;
+    }
+
+    var usd;
+    if (source === "usd")       usd = parseNum(vUsd.value);
+    else if (source === "iqd")  usd = parseNum(vIqd.value) / r.iqd;
+    else                        usd = parseNum(vToman.value) / r.toman;
+
+    if (source !== "usd")   vUsd.value   = fmt(usd);
+    if (source !== "iqd")   vIqd.value   = fmt(usd * r.iqd);
+    if (source !== "toman") vToman.value = fmt(usd * r.toman);
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        ref: refEl.value,
+        iqd: iqdRateEl.value,
+        toman: tomanRateEl.value
+      }));
+    } catch (e) { }
+  }
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      var d = JSON.parse(raw);
+      if (d.ref   != null) refEl.value       = d.ref;
+      if (d.iqd   != null) iqdRateEl.value   = d.iqd;
+      if (d.toman != null) tomanRateEl.value = d.toman;
+    } catch (e) { }
+  }
+
+  [refEl, iqdRateEl, tomanRateEl].forEach(function (el) {
+    el.addEventListener("input", function () {
+      updateInfo();
+      save();
+      recalc(lastSource);
+    });
+  });
+
+  Object.keys(fields).forEach(function (k) {
+    fields[k].addEventListener("input", function () { recalc(k); });
+    fields[k].addEventListener("focus", function () { lastSource = k; });
+  });
+
+  load();
+  updateInfo();
+  recalc(lastSource);
+
+  /* ═══ تسجيل Service Worker (PWA) ═══ */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function (err) {
+        console.warn("فشل تسجيل Service Worker:", err);
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
