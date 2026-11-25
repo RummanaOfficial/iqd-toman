@@ -1,6 +1,7 @@
 /* Service Worker — يجعل التطبيق يعمل بدون إنترنت */
 
-const CACHE_NAME = "iqd-toman-cache-v1";
+// تم تغيير رقم الإصدار إلى v2 لمسح الكاش القديم
+const CACHE_NAME = "iqd-toman-cache-v2"; 
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,7 +9,7 @@ const ASSETS = [
   "./icon.svg"
 ];
 
-/* التثبيت: خزّن الملفات الأساسية */
+/* التثبيت: خزّن الملفات الأساسية فقط */
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -30,9 +31,16 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-/* الجلب: أعطِ من الكاش أولاً، وإن لم يوجد اجلب من الشبكة */
+/* الجلب: تعامل فقط مع ملفات التطبيق، ولا تتدخل في طلبات الإنترنت الخارجية */
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+  
+  // ✅ سطر مهم جداً: إذا كان الطلب لموقع خارجي (مثل جلب الأسعار)، اتركه يمر للإنترنت مباشرة
+  if (url.origin !== self.location.origin) {
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
