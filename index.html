@@ -24,7 +24,7 @@
     padding-top:calc(24px + env(safe-area-inset-top));
     padding-bottom:calc(24px + env(safe-area-inset-bottom));
   }
-  .wrap{width:100%; max-width:660px}
+  .wrap{width:100%; max-width:660px; display: flex; flex-direction: column;}
   h1{font-size:1.35rem; text-align:center; margin:0 0 20px}
   .card{
     background:var(--card); border:1px solid var(--line); border-radius:16px;
@@ -64,6 +64,27 @@
   button.primary{background:var(--accent); color:#0b1220; border-color:var(--accent)}
   button.primary:hover{background:#7dd3fc}
   .status{font-size:.75rem; color:var(--muted); margin-top:8px; min-height:1.2em}
+  
+  /* تنسيق معلومات الشركة / المطور */
+  footer {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: auto;
+    padding-top: 20px;
+    padding-bottom: 10px;
+    line-height: 1.8;
+  }
+  footer a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 700;
+    transition: 0.2s;
+  }
+  footer a:hover {
+    color: #7dd3fc;
+    text-decoration: underline;
+  }
 </style>
 </head>
 <body>
@@ -133,11 +154,22 @@
   </div>
 
   <div class="note">الأسعار تُحفظ تلقائياً في متصفحك — عند عدم الاتصال يعمل التطبيق بآخر أسعار محفوظة.</div>
+
+  <!-- ✨ معلومات الشركة المطورة ✨ -->
+  <footer>
+تم التطوير بواسطة <a href="https://github.com/RummanaOfficial" target="_blank" rel="noopener">شركة رمانة </a>
+    <br>
+    &copy; <span id="year"></span> جميع الحقوق محفوظة.
+  </footer>
+
 </div>
 
 <script>
 (function () {
   "use strict";
+
+  // تحديث السنة تلقائياً في التذييل
+  document.getElementById("year").textContent = new Date().getFullYear();
 
   var refEl       = document.getElementById("refUsd");
   var iqdRateEl   = document.getElementById("iqdRate");
@@ -314,7 +346,6 @@
     btnRefresh.textContent = "⏳ جاري التحديث...";
     statusLine.textContent = "";
 
-    // ✅ الفحص المهم: التأكد من وجود اتصال قبل بدء الجلب
     if (!navigator.onLine) {
       var last = loadLastFetched();
       if (last) {
@@ -331,7 +362,7 @@
       }
       btnRefresh.disabled = false;
       btnRefresh.textContent = "🔄 تحديث تلقائي";
-      return; // إيقاف التنفيذ هنا
+      return;
     }
 
     var ref = parseNum(refEl.value) || 100;
