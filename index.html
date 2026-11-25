@@ -139,7 +139,6 @@
 (function () {
   "use strict";
 
-  /* ---------- العناصر ---------- */
   var refEl       = document.getElementById("refUsd");
   var iqdRateEl   = document.getElementById("iqdRate");
   var tomanRateEl = document.getElementById("tomanRate");
@@ -154,7 +153,6 @@
   var btnRefresh  = document.getElementById("btnRefresh");
   var btnShare    = document.getElementById("btnShare");
 
-  /* ---------- المفاتيح ---------- */
   var KEY_RATES      = "iqd-toman-rates-v2";
   var KEY_META       = "iqd-toman-meta-v2";
   var KEY_LAST_RATES = "iqd-toman-last-fetched-v2";
@@ -162,7 +160,6 @@
   var fields = { usd: vUsd, iqd: vIqd, toman: vToman };
   var lastSource = "usd";
 
-  /* ---------- أدوات الأرقام ---------- */
   function normalizeDigits(s) {
     return String(s)
       .replace(/[٠-٩]/g, function (d) { return "٠١٢٣٤٥٦٧٨٩".indexOf(d); })
@@ -179,7 +176,6 @@
     return r.toLocaleString("en-US", { maximumFractionDigits: 4 });
   }
 
-  /* ---------- الأسعار الداخلية ---------- */
   function readRates() {
     var ref   = parseNum(refEl.value);
     var iqd   = parseNum(iqdRateEl.value);
@@ -223,7 +219,6 @@
     if (source !== "toman") vToman.value = fmt(usd * r.toman);
   }
 
-  /* ---------- الحفظ والاسترجاع ---------- */
   function saveRates() {
     try {
       localStorage.setItem(KEY_RATES, JSON.stringify({
@@ -264,7 +259,6 @@
     } catch (e) {}
   }
 
-  /* ---------- شارات الحالة ---------- */
   function updateBadge(el, type) {
     el.className = "badge " + type;
     el.textContent = type === "auto" ? "تلقائي" : (type === "offline" ? "أوفلاين" : "يدوي");
@@ -274,30 +268,25 @@
     connBadge.textContent = online ? "متصل" : "غير متصل";
   }
 
-  /* ---------- جلب الأسعار من الإنترنت ---------- */
   async function fetchIraqiDinar() {
-    // IQWealth: سعر السوق الموازي في بغداد (بيع وشراء) بدون مفتاح
     var res = await fetch("https://iraqsm.com/data/fx.json", { cache: "no-store" });
     if (!res.ok) throw new Error("فشل جلب سعر الدينار: " + res.status);
     var data = await res.json();
 
-    // البنية الجديدة: { parallel: { buy: 1699.5, sell: 1699.5 } }
     var usdIqd = null;
     if (data && data.parallel && (data.parallel.sell || data.parallel.buy)) {
       usdIqd = data.parallel.sell || data.parallel.buy;
     } else if (data && data.official && data.official.cbi) {
-      // احتياطي: السعر الرسمي للبنك المركزي
       usdIqd = data.official.cbi;
     }
 
     if (!usdIqd || !isFinite(usdIqd) || usdIqd <= 0) {
-      throw new Error("لم يتم العثور على سعر USD/IQD في الاستجابة");
+      throw new Error("لم يتم العثور على سعر USD/IQD");
     }
-    return usdIqd; // سعر الدولار الواحد بالدينار
+    return usdIqd;
   }
 
   async function fetchToman() {
-    // Iran Market: سعر الدولار في السوق الحرة بالتومان (JSON مجاني، بدون مفتاح)
     var res = await fetch(
       "https://raw.githubusercontent.com/iran-market/iran-market.github.io/main/data/popular.json",
       { cache: "no-store" }
@@ -309,29 +298,46 @@
       throw new Error("بنية استجابة غير متوقعة");
     }
 
-    // نبحث عن العنصر الذي يمثل سعر الدولار في السوق الحرة
     var usdItem = data.data.find(function (item) {
       return item.symbol === "USD_IRR_FREE";
     });
 
     if (!usdItem || !usdItem.price || !isFinite(usdItem.price) || usdItem.price <= 0) {
-      throw new Error("لم يتم العثور على سعر USD/IRT في الاستجابة");
+      throw new Error("لم يتم العثور على سعر USD/IRT");
     }
 
-    return usdItem.price; // سعر الدولار الواحد بالتومان
+    return usdItem.price;
   }
 
-  /* ---------- التحديث التلقائي ---------- */
   async function refreshRates() {
     btnRefresh.disabled = true;
     btnRefresh.textContent = "⏳ جاري التحديث...";
     statusLine.textContent = "";
 
+    // ✅ الفحص المهم: التأكد من وجود اتصال قبل بدء الجلب
+    if (!navigator.onLine) {
+      var last = loadLastFetched();
+      if (last) {
+        refEl.value = last.ref || refEl.value;
+        if (last.iqd)   iqdRateEl.value   = last.iqd;
+        if (last.toman) tomanRateEl.value = last.toman;
+        updateBadge(iqdBadge, "offline");
+        updateBadge(tomanBadge, "offline");
+        statusLine.textContent = "📴 أنت غير متصل — تم استخدام آخر أسعار محفوظة (" + new Date(last.savedAt).toLocaleString("ar-IQ") + ")";
+        updateInfo();
+        recalc(lastSource);
+      } else {
+        statusLine.textContent = "❌ أنت غير متصل ولا توجد أسعار محفوظة مسبقاً.";
+      }
+      btnRefresh.disabled = false;
+      btnRefresh.textContent = "🔄 تحديث تلقائي";
+      return; // إيقاف التنفيذ هنا
+    }
+
     var ref = parseNum(refEl.value) || 100;
     var iqdSuccess = false, tomanSuccess = false;
     var errors = [];
 
-    // --- الدينار العراقي ---
     try {
       var iqdPerUsd = await fetchIraqiDinar();
       var iqdForRef = iqdPerUsd * ref;
@@ -343,7 +349,6 @@
       updateBadge(iqdBadge, "offline");
     }
 
-    // --- التومان ---
     try {
       var tomanPerUsd = await fetchToman();
       var tomanForRef = tomanPerUsd * ref;
@@ -355,7 +360,6 @@
       updateBadge(tomanBadge, "offline");
     }
 
-    // --- حفظ ---
     if (iqdSuccess || tomanSuccess) {
       saveRates();
       saveMeta({
@@ -373,7 +377,6 @@
       updateInfo();
       recalc(lastSource);
     } else {
-      // فشل كلاهما: حاول استخدام آخر أسعار محفوظة
       var last = loadLastFetched();
       if (last) {
         refEl.value = last.ref || refEl.value;
@@ -393,7 +396,6 @@
     btnRefresh.textContent = "🔄 تحديث تلقائي";
   }
 
-  /* ---------- المشاركة ---------- */
   async function share() {
     var r = readRates();
     if (!r) {
@@ -437,7 +439,6 @@
     }
   }
 
-  /* ---------- الأحداث ---------- */
   [refEl, iqdRateEl, tomanRateEl].forEach(function (el) {
     el.addEventListener("input", function () {
       updateInfo();
@@ -461,14 +462,15 @@
   btnRefresh.addEventListener("click", refreshRates);
   btnShare.addEventListener("click", share);
 
-  /* ---------- مراقبة الاتصال ---------- */
-  window.addEventListener("online", function () { setConnBadge(true); });
+  window.addEventListener("online", function () {
+    setConnBadge(true);
+    statusLine.textContent = "✅ عاد الاتصال بالإنترنت. اضغط تحديث لجلب أحدث الأسعار.";
+  });
   window.addEventListener("offline", function () {
     setConnBadge(false);
     statusLine.textContent = "📴 غير متصل — يعمل التطبيق بآخر أسعار محفوظة";
   });
 
-  /* ---------- التشغيل ---------- */
   loadRates();
   updateInfo();
   recalc(lastSource);
@@ -479,7 +481,6 @@
     statusLine.textContent = "آخر جلب ناجح: " + new Date(last.savedAt).toLocaleString("ar-IQ") + " — اضغط تحديث لتجديد الأسعار";
   }
 
-  /* ---------- Service Worker ---------- */
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
       navigator.serviceWorker.register("sw.js").catch(function (err) {
