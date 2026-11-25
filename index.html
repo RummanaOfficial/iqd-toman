@@ -71,7 +71,6 @@
 
   <h1>💱 حاسبة الدينار العراقي والتومان</h1>
 
-  <!-- أسعار الصرف -->
   <div class="card">
     <h2>
       <span>أسعار الصرف اليوم</span>
@@ -89,7 +88,7 @@
         تساوي
         <span id="iqdBadge" class="badge manual">يدوي</span>
       </span>
-      <input id="iqdRate" inputmode="decimal" value="169500">
+      <input id="iqdRate" inputmode="decimal" value="169950">
       <span class="unit">دينار عراقي</span>
     </div>
 
@@ -98,7 +97,7 @@
         وتساوي
         <span id="tomanBadge" class="badge manual">يدوي</span>
       </span>
-      <input id="tomanRate" inputmode="decimal" value="29200000">
+      <input id="tomanRate" inputmode="decimal" value="29289000">
       <span class="unit">تومان إيراني</span>
     </div>
 
@@ -111,7 +110,6 @@
     <div class="info" id="info"></div>
   </div>
 
-  <!-- التحويل -->
   <div class="card">
     <h2>التحويل (اكتب في أي خانة)</h2>
 
@@ -157,8 +155,8 @@
   var btnShare    = document.getElementById("btnShare");
 
   /* ---------- المفاتيح ---------- */
-  var KEY_RATES    = "iqd-toman-rates-v2";
-  var KEY_META     = "iqd-toman-meta-v2";   // {iqdAuto, tomanAuto, savedAt, source}
+  var KEY_RATES      = "iqd-toman-rates-v2";
+  var KEY_META       = "iqd-toman-meta-v2";
   var KEY_LAST_RATES = "iqd-toman-last-fetched-v2";
 
   var fields = { usd: vUsd, iqd: vIqd, toman: vToman };
@@ -278,22 +276,18 @@
 
   /* ---------- جلب الأسعار من الإنترنت ---------- */
   async function fetchIraqiDinar() {
-    // IQWealth: سعر السوق الموازي في بغداد (بيع/شراء) بدون مفتاح
+    // IQWealth: سعر السوق الموازي في بغداد (بيع وشراء) بدون مفتاح
     var res = await fetch("https://iraqsm.com/data/fx.json", { cache: "no-store" });
     if (!res.ok) throw new Error("فشل جلب سعر الدينار: " + res.status);
     var data = await res.json();
 
-    // نبحث عن أول عنصر يحتوي على USD/IQD أو نستخدم البنية المعتادة
-    // البنية قد تكون: { "USD": { "sell": ..., "buy": ... } } أو مشابهة
+    // البنية الجديدة: { parallel: { buy: 1699.5, sell: 1699.5 } }
     var usdIqd = null;
-    if (data && data.USD && (data.USD.sell || data.USD.buy)) {
-      usdIqd = data.USD.sell || data.USD.buy;
-    } else if (data && data.usd && (data.usd.sell || data.usd.buy)) {
-      usdIqd = data.usd.sell || data.usd.buy;
-    } else if (data && data.rates && data.rates.IQD) {
-      usdIqd = data.rates.IQD;
-    } else if (data && data.IQD) {
-      usdIqd = data.IQD;
+    if (data && data.parallel && (data.parallel.sell || data.parallel.buy)) {
+      usdIqd = data.parallel.sell || data.parallel.buy;
+    } else if (data && data.official && data.official.cbi) {
+      // احتياطي: السعر الرسمي للبنك المركزي
+      usdIqd = data.official.cbi;
     }
 
     if (!usdIqd || !isFinite(usdIqd) || usdIqd <= 0) {
@@ -303,43 +297,28 @@
   }
 
   async function fetchToman() {
-    // NetArz: سعر الدولار في السوق الحرة بطهران بالتومان (مجاني، بدون مفتاح)
-    // نحاول عدة نقاط نهاية محتملة
-    var urls = [
-      "https://api.netarz.ir/v1/rates/latest?symbols=USD&quote=IRT",
-      "https://api.netarz.ir/v1/latest?symbols=USD&quote=IRT",
-      "https://netarz.ir/api/v1/rates/latest?symbols=USD&quote=IRT"
-    ];
-    var lastErr = null;
-    for (var i = 0; i < urls.length; i++) {
-      try {
-        var res = await fetch(urls[i], { cache: "no-store" });
-        if (!res.ok) { lastErr = new Error("HTTP " + res.status); continue; }
-        var data = await res.json();
+    // Iran Market: سعر الدولار في السوق الحرة بالتومان (JSON مجاني، بدون مفتاح)
+    var res = await fetch(
+      "https://raw.githubusercontent.com/iran-market/iran-market.github.io/main/data/popular.json",
+      { cache: "no-store" }
+    );
+    if (!res.ok) throw new Error("فشل جلب سعر التومان: " + res.status);
+    var data = await res.json();
 
-        // محاولة استخراج السعر بعدة أشكال محتملة
-        var price = null;
-        if (data && data.USD && (data.USD.sell || data.USD.buy || data.USD.mid)) {
-          price = data.USD.sell || data.USD.mid || data.USD.buy;
-        } else if (data && data.rates && data.rates.USD) {
-          price = data.rates.USD.sell || data.rates.USD.mid || data.rates.USD.buy || data.rates.USD;
-        } else if (data && data.data && data.data.USD) {
-          price = data.data.USD.sell || data.data.USD.mid || data.data.USD.buy || data.data.USD;
-        } else if (data && data.price) {
-          price = data.price;
-        }
-
-        if (price && isFinite(price) && price > 0) {
-          // إذا كان السعر بالريال (IRR) نحوله إلى تومان (1 تومان = 10 ريال)
-          // NetArz يعطي القيمة عادة بالتومان حسب وصف الخدمة
-          return price;
-        }
-        lastErr = new Error("بنية استجابة غير متوقعة");
-      } catch (e) {
-        lastErr = e;
-      }
+    if (!data || !Array.isArray(data.data)) {
+      throw new Error("بنية استجابة غير متوقعة");
     }
-    throw lastErr || new Error("فشل جلب سعر التومان");
+
+    // نبحث عن العنصر الذي يمثل سعر الدولار في السوق الحرة
+    var usdItem = data.data.find(function (item) {
+      return item.symbol === "USD_IRR_FREE";
+    });
+
+    if (!usdItem || !usdItem.price || !isFinite(usdItem.price) || usdItem.price <= 0) {
+      throw new Error("لم يتم العثور على سعر USD/IRT في الاستجابة");
+    }
+
+    return usdItem.price; // سعر الدولار الواحد بالتومان
   }
 
   /* ---------- التحديث التلقائي ---------- */
@@ -444,7 +423,6 @@
         await navigator.clipboard.writeText(text);
         alert("✅ تم نسخ النتيجة إلى الحافظة");
       } else {
-        // احتياطي: إنشاء مربع نص لتحديده يدوياً
         var ta = document.createElement("textarea");
         ta.value = text;
         ta.style.position = "fixed"; ta.style.opacity = "0";
@@ -465,7 +443,6 @@
       updateInfo();
       saveRates();
       recalc(lastSource);
-      // عند التعديل اليدوي، غيّر الشارة إلى "يدوي"
       if (el === iqdRateEl)   updateBadge(iqdBadge, "manual");
       if (el === tomanRateEl) updateBadge(tomanBadge, "manual");
       saveMeta({
@@ -485,10 +462,7 @@
   btnShare.addEventListener("click", share);
 
   /* ---------- مراقبة الاتصال ---------- */
-  window.addEventListener("online", function () {
-    setConnBadge(true);
-    // لا نجلب تلقائياً عند العودة، بل نترك المستخدم يضغط "تحديث"
-  });
+  window.addEventListener("online", function () { setConnBadge(true); });
   window.addEventListener("offline", function () {
     setConnBadge(false);
     statusLine.textContent = "📴 غير متصل — يعمل التطبيق بآخر أسعار محفوظة";
@@ -500,8 +474,6 @@
   recalc(lastSource);
   setConnBadge(navigator.onLine);
 
-  // إذا كانت هناك أسعار محفوظة مسبقاً، لا نجلب تلقائياً عند التحميل
-  // بل نعرض آخر حالة فقط. المستخدم يضغط "تحديث تلقائي" عند الحاجة.
   var last = loadLastFetched();
   if (last && last.savedAt) {
     statusLine.textContent = "آخر جلب ناجح: " + new Date(last.savedAt).toLocaleString("ar-IQ") + " — اضغط تحديث لتجديد الأسعار";
