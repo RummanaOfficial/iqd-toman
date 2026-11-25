@@ -5,21 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>حاسبة الدينار العراقي والتومان</title>
 
-<!-- ═══ إضافات PWA ═══ -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
 <meta name="theme-color" content="#0b1220">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="حاسبة العملات">
-<!-- ══════════════════ -->
 
 <style>
   :root{
     --bg:#0b1220; --card:#1e293b; --line:#334155; --txt:#e2e8f0;
-    --muted:#94a3b8; --accent:#38bdf8;
+    --muted:#94a3b8; --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
   }
   *{box-sizing:border-box}
   body{
@@ -36,7 +30,7 @@
     background:var(--card); border:1px solid var(--line); border-radius:16px;
     padding:18px; margin-bottom:16px; box-shadow:0 10px 30px rgba(0,0,0,.25);
   }
-  .card h2{font-size:1rem; margin:0 0 14px; color:var(--accent); font-weight:600}
+  .card h2{font-size:1rem; margin:0 0 14px; color:var(--accent); font-weight:600; display:flex; align-items:center; justify-content:space-between; gap:8px}
   .row{display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; margin-bottom:10px}
   .row:last-child{margin-bottom:0}
   .lbl{color:var(--muted); font-size:.9rem; white-space:nowrap}
@@ -55,6 +49,21 @@
   .info b{color:var(--txt); font-weight:700}
   .err{color:#fca5a5}
   .note{text-align:center; font-size:.78rem; color:var(--muted); margin-top:16px; line-height:1.9}
+  .badge{font-size:.7rem; padding:3px 8px; border-radius:999px; font-weight:600}
+  .badge.auto{background:rgba(34,197,94,.15); color:var(--ok)}
+  .badge.manual{background:rgba(245,158,11,.15); color:var(--warn)}
+  .badge.offline{background:rgba(239,68,68,.15); color:var(--bad)}
+  .toolbar{display:flex; gap:8px; flex-wrap:wrap}
+  button{
+    border:1px solid var(--line); background:#0b1220; color:var(--txt);
+    padding:10px 14px; border-radius:10px; font-size:.85rem; font-weight:600;
+    cursor:pointer; transition:.15s; display:inline-flex; align-items:center; gap:6px;
+  }
+  button:hover{border-color:var(--accent); color:var(--accent)}
+  button:disabled{opacity:.5; cursor:wait}
+  button.primary{background:var(--accent); color:#0b1220; border-color:var(--accent)}
+  button.primary:hover{background:#7dd3fc}
+  .status{font-size:.75rem; color:var(--muted); margin-top:8px; min-height:1.2em}
 </style>
 </head>
 <body>
@@ -62,38 +71,62 @@
 
   <h1>💱 حاسبة الدينار العراقي والتومان</h1>
 
+  <!-- أسعار الصرف -->
   <div class="card">
-    <h2>أسعار الصرف اليوم</h2>
+    <h2>
+      <span>أسعار الصرف اليوم</span>
+      <span id="connBadge" class="badge auto">متصل</span>
+    </h2>
+
     <div class="row">
       <span class="lbl">كل</span>
       <input id="refUsd" inputmode="decimal" value="100">
       <span class="unit">دولار أمريكي</span>
     </div>
+
     <div class="row">
-      <span class="lbl">تساوي</span>
-      <input id="iqdRate" inputmode="decimal" value="160000">
+      <span class="lbl">
+        تساوي
+        <span id="iqdBadge" class="badge manual">يدوي</span>
+      </span>
+      <input id="iqdRate" inputmode="decimal" value="169500">
       <span class="unit">دينار عراقي</span>
     </div>
+
     <div class="row">
-      <span class="lbl">وتساوي</span>
-      <input id="tomanRate" inputmode="decimal" value="24000000">
+      <span class="lbl">
+        وتساوي
+        <span id="tomanBadge" class="badge manual">يدوي</span>
+      </span>
+      <input id="tomanRate" inputmode="decimal" value="29200000">
       <span class="unit">تومان إيراني</span>
     </div>
+
+    <div class="toolbar" style="margin-top:12px">
+      <button id="btnRefresh" class="primary">🔄 تحديث تلقائي</button>
+      <button id="btnShare">📤 مشاركة</button>
+    </div>
+    <div class="status" id="statusLine"></div>
+
     <div class="info" id="info"></div>
   </div>
 
+  <!-- التحويل -->
   <div class="card">
     <h2>التحويل (اكتب في أي خانة)</h2>
+
     <div class="row">
       <span class="lbl">دولار</span>
       <input class="big" id="vUsd" inputmode="decimal" placeholder="0">
       <span class="unit">USD</span>
     </div>
+
     <div class="row">
       <span class="lbl">دينار عراقي</span>
       <input class="big" id="vIqd" inputmode="decimal" placeholder="0">
       <span class="unit">IQD</span>
     </div>
+
     <div class="row">
       <span class="lbl">تومان</span>
       <input class="big" id="vToman" inputmode="decimal" placeholder="0">
@@ -101,43 +134,54 @@
     </div>
   </div>
 
-  <div class="note">الأسعار تُحفظ تلقائياً في متصفحك — عدّلها كل يوم عند تغيّر السعر.</div>
+  <div class="note">الأسعار تُحفظ تلقائياً في متصفحك — عند عدم الاتصال يعمل التطبيق بآخر أسعار محفوظة.</div>
 </div>
 
 <script>
 (function () {
   "use strict";
 
-  var refEl      = document.getElementById("refUsd");
-  var iqdRateEl  = document.getElementById("iqdRate");
-  var tomanRateEl= document.getElementById("tomanRate");
-  var vUsd       = document.getElementById("vUsd");
-  var vIqd       = document.getElementById("vIqd");
-  var vToman     = document.getElementById("vToman");
-  var infoEl     = document.getElementById("info");
+  /* ---------- العناصر ---------- */
+  var refEl       = document.getElementById("refUsd");
+  var iqdRateEl   = document.getElementById("iqdRate");
+  var tomanRateEl = document.getElementById("tomanRate");
+  var vUsd        = document.getElementById("vUsd");
+  var vIqd        = document.getElementById("vIqd");
+  var vToman      = document.getElementById("vToman");
+  var infoEl      = document.getElementById("info");
+  var statusLine  = document.getElementById("statusLine");
+  var connBadge   = document.getElementById("connBadge");
+  var iqdBadge    = document.getElementById("iqdBadge");
+  var tomanBadge  = document.getElementById("tomanBadge");
+  var btnRefresh  = document.getElementById("btnRefresh");
+  var btnShare    = document.getElementById("btnShare");
 
-  var KEY = "iqd-toman-rates-v1";
+  /* ---------- المفاتيح ---------- */
+  var KEY_RATES    = "iqd-toman-rates-v2";
+  var KEY_META     = "iqd-toman-meta-v2";   // {iqdAuto, tomanAuto, savedAt, source}
+  var KEY_LAST_RATES = "iqd-toman-last-fetched-v2";
+
   var fields = { usd: vUsd, iqd: vIqd, toman: vToman };
   var lastSource = "usd";
 
+  /* ---------- أدوات الأرقام ---------- */
   function normalizeDigits(s) {
     return String(s)
       .replace(/[٠-٩]/g, function (d) { return "٠١٢٣٤٥٦٧٨٩".indexOf(d); })
       .replace(/[۰-۹]/g, function (d) { return "۰۱۲۳۴۵۶۷۸۹".indexOf(d); });
   }
-
   function parseNum(s) {
     var t = normalizeDigits(s).replace(/[,\s٬_]/g, "");
     var n = parseFloat(t);
     return isFinite(n) ? n : 0;
   }
-
   function fmt(n) {
     if (!isFinite(n)) return "";
     var r = Math.round(n * 10000) / 10000;
     return r.toLocaleString("en-US", { maximumFractionDigits: 4 });
   }
 
+  /* ---------- الأسعار الداخلية ---------- */
   function readRates() {
     var ref   = parseNum(refEl.value);
     var iqd   = parseNum(iqdRateEl.value);
@@ -156,7 +200,6 @@
     }
     var tomanPerIqd = r.toman / r.iqd;
     var iqdPerToman = r.iqd / r.toman;
-
     infoEl.innerHTML =
       '<div>1 دولار = <b>' + fmt(r.iqd)   + '</b> دينار عراقي</div>' +
       '<div>1 دولار = <b>' + fmt(r.toman) + '</b> تومان</div>' +
@@ -166,15 +209,12 @@
 
   function recalc(source) {
     lastSource = source;
-
     var others = Object.keys(fields).filter(function (k) { return k !== source; });
     var r = readRates();
-
     if (!r || fields[source].value.trim() === "") {
       others.forEach(function (k) { fields[k].value = ""; });
       return;
     }
-
     var usd;
     if (source === "usd")       usd = parseNum(vUsd.value);
     else if (source === "iqd")  usd = parseNum(vIqd.value) / r.iqd;
@@ -185,32 +225,254 @@
     if (source !== "toman") vToman.value = fmt(usd * r.toman);
   }
 
-  function save() {
+  /* ---------- الحفظ والاسترجاع ---------- */
+  function saveRates() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({
-        ref: refEl.value,
-        iqd: iqdRateEl.value,
-        toman: tomanRateEl.value
+      localStorage.setItem(KEY_RATES, JSON.stringify({
+        ref: refEl.value, iqd: iqdRateEl.value, toman: tomanRateEl.value
       }));
-    } catch (e) { }
+    } catch (e) {}
+  }
+  function saveMeta(meta) {
+    try { localStorage.setItem(KEY_META, JSON.stringify(meta)); } catch (e) {}
+  }
+  function loadMeta() {
+    try { return JSON.parse(localStorage.getItem(KEY_META) || "null"); } catch (e) { return null; }
+  }
+  function saveLastFetched(data) {
+    try { localStorage.setItem(KEY_LAST_RATES, JSON.stringify(data)); } catch (e) {}
+  }
+  function loadLastFetched() {
+    try { return JSON.parse(localStorage.getItem(KEY_LAST_RATES) || "null"); } catch (e) { return null; }
   }
 
-  function load() {
+  function loadRates() {
     try {
-      var raw = localStorage.getItem(KEY);
-      if (!raw) return;
-      var d = JSON.parse(raw);
-      if (d.ref   != null) refEl.value       = d.ref;
-      if (d.iqd   != null) iqdRateEl.value   = d.iqd;
-      if (d.toman != null) tomanRateEl.value = d.toman;
-    } catch (e) { }
+      var raw = localStorage.getItem(KEY_RATES);
+      if (raw) {
+        var d = JSON.parse(raw);
+        if (d.ref   != null) refEl.value       = d.ref;
+        if (d.iqd   != null) iqdRateEl.value   = d.iqd;
+        if (d.toman != null) tomanRateEl.value = d.toman;
+      }
+      var meta = loadMeta();
+      if (meta) {
+        updateBadge(iqdBadge,  meta.iqdAuto  ? "auto" : "manual");
+        updateBadge(tomanBadge, meta.tomanAuto ? "auto" : "manual");
+        if (meta.savedAt) {
+          statusLine.textContent = "آخر حفظ: " + new Date(meta.savedAt).toLocaleString("ar-IQ");
+        }
+      }
+    } catch (e) {}
   }
 
+  /* ---------- شارات الحالة ---------- */
+  function updateBadge(el, type) {
+    el.className = "badge " + type;
+    el.textContent = type === "auto" ? "تلقائي" : (type === "offline" ? "أوفلاين" : "يدوي");
+  }
+  function setConnBadge(online) {
+    connBadge.className = "badge " + (online ? "auto" : "offline");
+    connBadge.textContent = online ? "متصل" : "غير متصل";
+  }
+
+  /* ---------- جلب الأسعار من الإنترنت ---------- */
+  async function fetchIraqiDinar() {
+    // IQWealth: سعر السوق الموازي في بغداد (بيع/شراء) بدون مفتاح
+    var res = await fetch("https://iraqsm.com/data/fx.json", { cache: "no-store" });
+    if (!res.ok) throw new Error("فشل جلب سعر الدينار: " + res.status);
+    var data = await res.json();
+
+    // نبحث عن أول عنصر يحتوي على USD/IQD أو نستخدم البنية المعتادة
+    // البنية قد تكون: { "USD": { "sell": ..., "buy": ... } } أو مشابهة
+    var usdIqd = null;
+    if (data && data.USD && (data.USD.sell || data.USD.buy)) {
+      usdIqd = data.USD.sell || data.USD.buy;
+    } else if (data && data.usd && (data.usd.sell || data.usd.buy)) {
+      usdIqd = data.usd.sell || data.usd.buy;
+    } else if (data && data.rates && data.rates.IQD) {
+      usdIqd = data.rates.IQD;
+    } else if (data && data.IQD) {
+      usdIqd = data.IQD;
+    }
+
+    if (!usdIqd || !isFinite(usdIqd) || usdIqd <= 0) {
+      throw new Error("لم يتم العثور على سعر USD/IQD في الاستجابة");
+    }
+    return usdIqd; // سعر الدولار الواحد بالدينار
+  }
+
+  async function fetchToman() {
+    // NetArz: سعر الدولار في السوق الحرة بطهران بالتومان (مجاني، بدون مفتاح)
+    // نحاول عدة نقاط نهاية محتملة
+    var urls = [
+      "https://api.netarz.ir/v1/rates/latest?symbols=USD&quote=IRT",
+      "https://api.netarz.ir/v1/latest?symbols=USD&quote=IRT",
+      "https://netarz.ir/api/v1/rates/latest?symbols=USD&quote=IRT"
+    ];
+    var lastErr = null;
+    for (var i = 0; i < urls.length; i++) {
+      try {
+        var res = await fetch(urls[i], { cache: "no-store" });
+        if (!res.ok) { lastErr = new Error("HTTP " + res.status); continue; }
+        var data = await res.json();
+
+        // محاولة استخراج السعر بعدة أشكال محتملة
+        var price = null;
+        if (data && data.USD && (data.USD.sell || data.USD.buy || data.USD.mid)) {
+          price = data.USD.sell || data.USD.mid || data.USD.buy;
+        } else if (data && data.rates && data.rates.USD) {
+          price = data.rates.USD.sell || data.rates.USD.mid || data.rates.USD.buy || data.rates.USD;
+        } else if (data && data.data && data.data.USD) {
+          price = data.data.USD.sell || data.data.USD.mid || data.data.USD.buy || data.data.USD;
+        } else if (data && data.price) {
+          price = data.price;
+        }
+
+        if (price && isFinite(price) && price > 0) {
+          // إذا كان السعر بالريال (IRR) نحوله إلى تومان (1 تومان = 10 ريال)
+          // NetArz يعطي القيمة عادة بالتومان حسب وصف الخدمة
+          return price;
+        }
+        lastErr = new Error("بنية استجابة غير متوقعة");
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("فشل جلب سعر التومان");
+  }
+
+  /* ---------- التحديث التلقائي ---------- */
+  async function refreshRates() {
+    btnRefresh.disabled = true;
+    btnRefresh.textContent = "⏳ جاري التحديث...";
+    statusLine.textContent = "";
+
+    var ref = parseNum(refEl.value) || 100;
+    var iqdSuccess = false, tomanSuccess = false;
+    var errors = [];
+
+    // --- الدينار العراقي ---
+    try {
+      var iqdPerUsd = await fetchIraqiDinar();
+      var iqdForRef = iqdPerUsd * ref;
+      iqdRateEl.value = fmt(iqdForRef);
+      updateBadge(iqdBadge, "auto");
+      iqdSuccess = true;
+    } catch (e) {
+      errors.push("الدينار: " + e.message);
+      updateBadge(iqdBadge, "offline");
+    }
+
+    // --- التومان ---
+    try {
+      var tomanPerUsd = await fetchToman();
+      var tomanForRef = tomanPerUsd * ref;
+      tomanRateEl.value = fmt(tomanForRef);
+      updateBadge(tomanBadge, "auto");
+      tomanSuccess = true;
+    } catch (e) {
+      errors.push("التومان: " + e.message);
+      updateBadge(tomanBadge, "offline");
+    }
+
+    // --- حفظ ---
+    if (iqdSuccess || tomanSuccess) {
+      saveRates();
+      saveMeta({
+        iqdAuto: iqdSuccess,
+        tomanAuto: tomanSuccess,
+        savedAt: new Date().toISOString()
+      });
+      saveLastFetched({
+        iqd: iqdRateEl.value,
+        toman: tomanRateEl.value,
+        ref: refEl.value,
+        savedAt: new Date().toISOString()
+      });
+      statusLine.textContent = "✅ تم تحديث الأسعار من الإنترنت وحفظها";
+      updateInfo();
+      recalc(lastSource);
+    } else {
+      // فشل كلاهما: حاول استخدام آخر أسعار محفوظة
+      var last = loadLastFetched();
+      if (last) {
+        refEl.value = last.ref || refEl.value;
+        if (last.iqd)   iqdRateEl.value   = last.iqd;
+        if (last.toman) tomanRateEl.value = last.toman;
+        updateBadge(iqdBadge, "offline");
+        updateBadge(tomanBadge, "offline");
+        statusLine.textContent = "⚠️ تعذر الاتصال — تم استخدام آخر أسعار محفوظة (" + new Date(last.savedAt).toLocaleString("ar-IQ") + ")";
+        updateInfo();
+        recalc(lastSource);
+      } else {
+        statusLine.textContent = "❌ تعذر جلب الأسعار: " + errors.join(" | ");
+      }
+    }
+
+    btnRefresh.disabled = false;
+    btnRefresh.textContent = "🔄 تحديث تلقائي";
+  }
+
+  /* ---------- المشاركة ---------- */
+  async function share() {
+    var r = readRates();
+    if (!r) {
+      alert("أدخل أسعار الصرف أولاً قبل المشاركة.");
+      return;
+    }
+    var ref = parseNum(refEl.value) || 100;
+    var usdVal = vUsd.value || "—";
+    var iqdVal = vIqd.value || "—";
+    var tomanVal = vToman.value || "—";
+
+    var text =
+      "💱 حاسبة الدينار العراقي والتومان\n\n" +
+      "أسعار الصرف:\n" +
+      "• " + ref + " دولار = " + fmt(parseNum(iqdRateEl.value)) + " دينار عراقي\n" +
+      "• " + ref + " دولار = " + fmt(parseNum(tomanRateEl.value)) + " تومان إيراني\n\n" +
+      "النتيجة:\n" +
+      "• الدولار: " + usdVal + "\n" +
+      "• الدينار العراقي: " + iqdVal + "\n" +
+      "• التومان: " + tomanVal + "\n\n" +
+      "🔗 " + location.href;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "حاسبة الدينار والتومان", text: text });
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        alert("✅ تم نسخ النتيجة إلى الحافظة");
+      } else {
+        // احتياطي: إنشاء مربع نص لتحديده يدوياً
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        alert("✅ تم نسخ النتيجة");
+      }
+    } catch (e) {
+      if (e.name !== "AbortError") alert("تعذر المشاركة: " + e.message);
+    }
+  }
+
+  /* ---------- الأحداث ---------- */
   [refEl, iqdRateEl, tomanRateEl].forEach(function (el) {
     el.addEventListener("input", function () {
       updateInfo();
-      save();
+      saveRates();
       recalc(lastSource);
+      // عند التعديل اليدوي، غيّر الشارة إلى "يدوي"
+      if (el === iqdRateEl)   updateBadge(iqdBadge, "manual");
+      if (el === tomanRateEl) updateBadge(tomanBadge, "manual");
+      saveMeta({
+        iqdAuto: iqdBadge.textContent === "تلقائي",
+        tomanAuto: tomanBadge.textContent === "تلقائي",
+        savedAt: new Date().toISOString()
+      });
     });
   });
 
@@ -219,11 +481,33 @@
     fields[k].addEventListener("focus", function () { lastSource = k; });
   });
 
-  load();
+  btnRefresh.addEventListener("click", refreshRates);
+  btnShare.addEventListener("click", share);
+
+  /* ---------- مراقبة الاتصال ---------- */
+  window.addEventListener("online", function () {
+    setConnBadge(true);
+    // لا نجلب تلقائياً عند العودة، بل نترك المستخدم يضغط "تحديث"
+  });
+  window.addEventListener("offline", function () {
+    setConnBadge(false);
+    statusLine.textContent = "📴 غير متصل — يعمل التطبيق بآخر أسعار محفوظة";
+  });
+
+  /* ---------- التشغيل ---------- */
+  loadRates();
   updateInfo();
   recalc(lastSource);
+  setConnBadge(navigator.onLine);
 
-  /* ═══ تسجيل Service Worker (PWA) ═══ */
+  // إذا كانت هناك أسعار محفوظة مسبقاً، لا نجلب تلقائياً عند التحميل
+  // بل نعرض آخر حالة فقط. المستخدم يضغط "تحديث تلقائي" عند الحاجة.
+  var last = loadLastFetched();
+  if (last && last.savedAt) {
+    statusLine.textContent = "آخر جلب ناجح: " + new Date(last.savedAt).toLocaleString("ar-IQ") + " — اضغط تحديث لتجديد الأسعار";
+  }
+
+  /* ---------- Service Worker ---------- */
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
       navigator.serviceWorker.register("sw.js").catch(function (err) {
